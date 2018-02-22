@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+	_ "github.com/jinzhu/gorm/dialects/postgres" // Add the postgres driver
 )
 
 var upgrader = websocket.Upgrader{
@@ -14,18 +15,19 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func checkApiKey(apiKey string) (isValid bool) {
+func checkAPIKey(apiKey string) (isValid bool) {
 	isValid = true
 	return
 }
 
+// HandleRoot upgrades '/' to websocket
 func HandleRoot(w http.ResponseWriter, r *http.Request) {
 	apiKeys := r.URL.Query()["apiKey"]
 	if len(apiKeys) != 1 {
 		fmt.Println("Bad apiKey count, should be 1", len(apiKeys))
 		return
 	}
-	if !checkApiKey(apiKeys[0]) {
+	if !checkAPIKey(apiKeys[0]) {
 		fmt.Println("Invalid apiKey", apiKeys[0])
 		return
 	}
