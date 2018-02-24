@@ -2,6 +2,7 @@ package api
 
 import (
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -13,5 +14,8 @@ func HandleUserCreateAPIKeys(w http.ResponseWriter, r *http.Request) {
 func HandleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	io.WriteString(w, `{"alive": true}`)
+	_, err := io.WriteString(w, `{"alive": true}`)
+	if err != nil {
+		log.Print("Failed to write health check response: ", err)
+	}
 }
