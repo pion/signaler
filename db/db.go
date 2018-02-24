@@ -15,15 +15,20 @@ var (
 func init() {
 	var err error
 
+	dbHost := os.Getenv("DB_HOST")
 	dbUser := os.Getenv("DB_USER")
 	dbPass := os.Getenv("DB_PASS")
+
+	if dbHost == "" {
+		panic("DB_HOST is a required environment variable")
+	}
 
 	if dbUser == "" {
 		panic("DB_USER is a required environment variable")
 	}
 
 	DB, err = gorm.Open("postgres",
-		fmt.Sprintf("host=db sslmode=disable dbname=pion user=%s password=%s", dbUser, dbPass))
+		fmt.Sprintf("host=%s sslmode=disable dbname=pion user=%s password=%s", dbHost, dbUser, dbPass))
 
 	if err != nil {
 		panic(err)

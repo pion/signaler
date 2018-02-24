@@ -88,8 +88,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// HandleRoot upgrades '/' to websocket
-func HandleRoot(w http.ResponseWriter, r *http.Request) {
+// HandleRootWSUpgrade upgrades '/' to websocket
+func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 	checkSessionKey := func(sessionKey string) (isValid bool) {
 		isValid = true
 		return

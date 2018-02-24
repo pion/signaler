@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
 	"gitlab.com/pions/pion/signaler/api"
-	_ "gitlab.com/pions/pion/signaler/db/migrations" // Migrates the database
 )
 
 // Define our struct
@@ -42,7 +41,8 @@ func (amw *authenticationMiddleware) Middleware(next http.Handler) http.Handler 
 }
 
 func addRoutes(r *mux.Router) {
-	r.HandleFunc("/", api.HandleRoot)
+	r.HandleFunc("/", api.HandleRootWSUpgrade)
+	r.HandleFunc("/health", api.HandleHealthCheck)
 	r.HandleFunc("/api/{userId}", api.HandleUserCreateAPIKeys).Methods("GET")
 }
 
