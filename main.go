@@ -1,15 +1,16 @@
 package main
 
 import (
+	"log"
+	"net/http"
+	"os"
+
 	"github.com/auth0/go-jwt-middleware"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/urfave/negroni"
 	"gitlab.com/pions/pion/signaler/api"
 	_ "gitlab.com/pions/pion/signaler/db/migrations" // Migrates the database
-	"log"
-	"net/http"
-	"os"
 )
 
 // Define our struct
