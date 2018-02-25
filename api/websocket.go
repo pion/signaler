@@ -2,28 +2,32 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"sync"
+	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/gorilla/websocket"
 	_ "github.com/jinzhu/gorm/dialects/postgres" // Add the postgres driver
 )
 
-type MessageBase struct {
+const pingPeriod = 5 * time.Second
+
+type messageBase struct {
 	Method string `json:"method"`
 }
 
-type MessageMembers struct {
-	MessageBase
+type messageMembers struct {
+	messageBase
 	Args struct {
 		Members []string `json:"members"`
 	} `json:"args"`
 }
-type MessageSDP struct {
-	MessageBase
+type messageSDP struct {
+	messageBase
 	Args struct {
 		Sdp struct {
 			Type string `json:"sdp"`
@@ -33,8 +37,8 @@ type MessageSDP struct {
 		Dst string `json:"dst"`
 	} `json:"args"`
 }
-type MessageCandidate struct {
-	MessageBase
+type messageCandidate struct {
+	messageBase
 	Args struct {
 		Candidate struct {
 			Candidate        string `json:"candidate"`
@@ -46,17 +50,20 @@ type MessageCandidate struct {
 		Dst string `json:"dst"`
 	} `json:"args"`
 }
-type MessageExit struct {
-	MessageBase
+type messageExit struct {
+	messageBase
 	Args struct {
 		SessionKey string `json:"sessionKey"`
 	} `json:"args"`
+}
+type messagePing struct {
+	messageBase
 }
 
 var membersMap sync.Map
 
 func sendMembers(conn *websocket.Conn) error {
-	message := MessageMembers{MessageBase: MessageBase{Method: "members"}}
+	message := messageMembers{messageBase: messageBase{Method: "members"}}
 	membersMap.Range(func(key, value interface{}) bool {
 		message.Args.Members = append(message.Args.Members, key.(string))
 		return true
@@ -65,31 +72,37 @@ func sendMembers(conn *websocket.Conn) error {
 }
 
 func sendSdp(conn *websocket.Conn, raw []byte) error {
-	message := MessageSDP{}
+	message := messageSDP{}
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
+
 	dstConn, ok := membersMap.Load(message.Args.Dst)
 	if ok == false {
-		return errors.New("No entry found in membersMap")
+		return errors.New("no entry found in membersMap")
 	}
 	return dstConn.(*websocket.Conn).WriteJSON(message)
 }
 
 func sendCandidate(conn *websocket.Conn, raw []byte) error {
-	message := MessageCandidate{}
+	message := messageCandidate{}
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
 	dstConn, ok := membersMap.Load(message.Args.Dst)
 	if ok == false {
-		return errors.New("No entry found in membersMap")
+		return errors.New("no entry found in membersMap")
 	}
 	return dstConn.(*websocket.Conn).WriteJSON(message)
 }
 
+func sendPing(conn *websocket.Conn) error {
+	message := messagePing{messageBase: messageBase{Method: "ping"}}
+	return conn.WriteJSON(message)
+}
+
 func announceExit(sessionKey string) {
-	message := MessageExit{MessageBase: MessageBase{Method: "exit"}}
+	message := messageExit{messageBase: messageBase{Method: "exit"}}
 	message.Args.SessionKey = sessionKey
 
 	membersMap.Range(func(key, value interface{}) bool {
@@ -104,6 +117,65 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+func handleClientMessage(conn *websocket.Conn, raw []byte) error {
+	message := messageBase{}
+	var err error
+	if err = json.Unmarshal(raw, &message); err != nil {
+		return err
+	}
+
+	switch message.Method {
+	case "members":
+		return errors.Wrap(sendMembers(conn), "sendMembers failed")
+	case "sdp":
+		return errors.Wrap(sendSdp(conn, raw), "sendSdp failed")
+	case "candidate":
+		return errors.Wrap(sendCandidate(conn, raw), "sendCadidate failed")
+	case "pong":
+		log.Printf("Received pong from %v", conn)
+		return nil
+	default:
+		return fmt.Errorf("unknown client method %s", message.Method)
+	}
+}
+
+func handleWS(conn *websocket.Conn) {
+	stop := make(chan struct{})
+	in := make(chan []byte)
+	pingTicker := time.NewTicker(pingPeriod)
+
+	go func() {
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
+				log.Println("Error while reading:", err)
+				close(stop)
+				break
+			}
+			in <- raw
+		}
+		log.Println("Stop reading of connection from", conn.RemoteAddr())
+	}()
+
+	for {
+		select {
+		case _ = <-pingTicker.C:
+			log.Println("Ping")
+			if err := sendPing(conn); err != nil {
+				log.Println("Error while writing:", err)
+				return
+			}
+		case raw := <-in:
+			if err := handleClientMessage(conn, raw); err != nil {
+				log.Println("Error while handling client message:", err)
+				return
+			}
+		case <-stop:
+			return
+		}
+	}
 }
 
 // HandleRootWSUpgrade upgrades '/' to websocket
@@ -129,6 +201,7 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 		log.Print("Failed to upgrade:", err)
 		return
 	}
+
 	defer func() {
 		membersMap.Delete(sessionKey)
 		announceExit(sessionKey)
@@ -143,38 +216,5 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message := MessageBase{}
-	for {
-		_, raw, err := c.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			return
-		}
-
-		if err = json.Unmarshal(raw, &message); err != nil {
-			log.Println("unmarshal:", err)
-			return
-		}
-
-		switch message.Method {
-		case "members":
-			if err = sendMembers(c); err != nil {
-				log.Println("sendMembers:", err)
-				return
-			}
-		case "sdp":
-			if err = sendSdp(c, raw); err != nil {
-				log.Println("sendSdp:", err)
-				return
-			}
-		case "candidate":
-			if err = sendCandidate(c, raw); err != nil {
-				log.Println("sendCandidate:", err)
-				return
-			}
-		default:
-			log.Println("unknown method:", message.Method)
-			return
-		}
-	}
+	handleWS(c)
 }
