@@ -121,8 +121,7 @@ var upgrader = websocket.Upgrader{
 
 func handleClientMessage(conn *websocket.Conn, raw []byte) error {
 	message := messageBase{}
-	var err error
-	if err = json.Unmarshal(raw, &message); err != nil {
+	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
 
