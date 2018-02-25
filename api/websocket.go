@@ -46,6 +46,12 @@ type MessageCandidate struct {
 		Dst string `json:"dst"`
 	} `json:"args"`
 }
+type MessageExit struct {
+	MessageBase
+	Args struct {
+		SessionKey string `json:"sessionKey"`
+	} `json:"args"`
+}
 
 var membersMap sync.Map
 
@@ -82,6 +88,18 @@ func sendCandidate(conn *websocket.Conn, raw []byte) error {
 	return dstConn.(*websocket.Conn).WriteJSON(message)
 }
 
+func announceExit(sessionKey string) {
+	message := MessageExit{MessageBase: MessageBase{Method: "exit"}}
+	message.Args.SessionKey = sessionKey
+
+	membersMap.Range(func(key, value interface{}) bool {
+		if err := value.(*websocket.Conn).WriteJSON(message); err != nil {
+			fmt.Println("Failed to announceExit", sessionKey, value.(string), err)
+		}
+		return true
+	})
+}
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -113,6 +131,7 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() {
 		membersMap.Delete(sessionKey)
+		announceExit(sessionKey)
 		if err := c.Close(); err != nil {
 			log.Println("Failed to close websocket", err)
 		}
