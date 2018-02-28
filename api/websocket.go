@@ -133,7 +133,6 @@ func handleClientMessage(conn *websocket.Conn, raw []byte) error {
 	case "candidate":
 		return errors.Wrap(sendCandidate(conn, raw), "sendCadidate failed")
 	case "pong":
-		log.Printf("Received pong from %v", conn)
 		return nil
 	default:
 		return fmt.Errorf("unknown client method %s", message.Method)
@@ -161,7 +160,6 @@ func handleWS(conn *websocket.Conn) {
 	for {
 		select {
 		case _ = <-pingTicker.C:
-			log.Println("Ping")
 			if err := sendPing(conn); err != nil {
 				log.Println("Error while writing:", err)
 				return
