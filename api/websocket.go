@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	pionRoom "gitlab.com/pions/pion/signaler/room"
+	"gitlab.com/pions/pion/util/go/jwt"
 
 	"github.com/gorilla/websocket"
-	_ "github.com/jinzhu/gorm/dialects/postgres" // Add the postgres driver
 )
 
 const pingPeriod = 5 * time.Second
@@ -60,36 +60,36 @@ type messagePing struct {
 	messageBase
 }
 
-var membersMap sync.Map
-
-func sendMembers(conn *websocket.Conn) error {
+func sendMembers(claims *jwt.PionClaim, conn *websocket.Conn) error {
 	message := messageMembers{messageBase: messageBase{Method: "members"}}
-	membersMap.Range(func(key, value interface{}) bool {
-		message.Args.Members = append(message.Args.Members, key.(string))
-		return true
-	})
+	if membersMap, ok := pionRoom.GetRoom(claims.ApiKeyID, claims.Room); ok == true {
+		membersMap.Range(func(key, value interface{}) bool {
+			message.Args.Members = append(message.Args.Members, key.(string))
+			return true
+		})
+	}
 	return conn.WriteJSON(message)
 }
 
-func sendSdp(conn *websocket.Conn, raw []byte) error {
+func sendSdp(claims *jwt.PionClaim, conn *websocket.Conn, raw []byte) error {
 	message := messageSDP{}
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
 
-	dstConn, ok := membersMap.Load(message.Args.Dst)
+	dstConn, ok := pionRoom.GetSession(claims.ApiKeyID, claims.Room, message.Args.Dst)
 	if ok == false {
 		return errors.New("no entry found in membersMap")
 	}
 	return dstConn.(*websocket.Conn).WriteJSON(message)
 }
 
-func sendCandidate(conn *websocket.Conn, raw []byte) error {
+func sendCandidate(claims *jwt.PionClaim, conn *websocket.Conn, raw []byte) error {
 	message := messageCandidate{}
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
-	dstConn, ok := membersMap.Load(message.Args.Dst)
+	dstConn, ok := pionRoom.GetSession(claims.ApiKeyID, claims.Room, message.Args.Dst)
 	if ok == false {
 		return errors.New("no entry found in membersMap")
 	}
@@ -101,16 +101,18 @@ func sendPing(conn *websocket.Conn) error {
 	return conn.WriteJSON(message)
 }
 
-func announceExit(sessionKey string) {
+func announceExit(apiKey, room, sessionKey string) {
 	message := messageExit{messageBase: messageBase{Method: "exit"}}
 	message.Args.SessionKey = sessionKey
 
-	membersMap.Range(func(key, value interface{}) bool {
-		if err := value.(*websocket.Conn).WriteJSON(message); err != nil {
-			fmt.Println("Failed to announceExit", sessionKey, value.(string), err)
-		}
-		return true
-	})
+	if membersMap, ok := pionRoom.GetRoom(apiKey, room); ok == true {
+		membersMap.Range(func(key, value interface{}) bool {
+			if err := value.(*websocket.Conn).WriteJSON(message); err != nil {
+				fmt.Println("Failed to announceExit", sessionKey, value.(string), err)
+			}
+			return true
+		})
+	}
 }
 
 var upgrader = websocket.Upgrader{
@@ -119,7 +121,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func handleClientMessage(conn *websocket.Conn, raw []byte) error {
+func handleClientMessage(conn *websocket.Conn, claims *jwt.PionClaim, raw []byte) error {
 	message := messageBase{}
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
@@ -127,11 +129,11 @@ func handleClientMessage(conn *websocket.Conn, raw []byte) error {
 
 	switch message.Method {
 	case "members":
-		return errors.Wrap(sendMembers(conn), "sendMembers failed")
+		return errors.Wrap(sendMembers(claims, conn), "sendMembers failed")
 	case "sdp":
-		return errors.Wrap(sendSdp(conn, raw), "sendSdp failed")
+		return errors.Wrap(sendSdp(claims, conn, raw), "sendSdp failed")
 	case "candidate":
-		return errors.Wrap(sendCandidate(conn, raw), "sendCadidate failed")
+		return errors.Wrap(sendCandidate(claims, conn, raw), "sendCadidate failed")
 	case "pong":
 		return nil
 	default:
@@ -139,7 +141,7 @@ func handleClientMessage(conn *websocket.Conn, raw []byte) error {
 	}
 }
 
-func handleWS(conn *websocket.Conn) {
+func handleWS(conn *websocket.Conn, claims *jwt.PionClaim) {
 	stop := make(chan struct{})
 	in := make(chan []byte)
 	pingTicker := time.NewTicker(pingPeriod)
@@ -165,7 +167,7 @@ func handleWS(conn *websocket.Conn) {
 				return
 			}
 		case raw := <-in:
-			if err := handleClientMessage(conn, raw); err != nil {
+			if err := handleClientMessage(conn, claims, raw); err != nil {
 				log.Println("Error while handling client message:", err)
 				return
 			}
@@ -177,21 +179,16 @@ func handleWS(conn *websocket.Conn) {
 
 // HandleRootWSUpgrade upgrades '/' to websocket
 func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
-	checkSessionKey := func(sessionKey string) (isValid bool) {
-		isValid = true
+	assertClaims := func(claims *jwt.PionClaim) (err error) {
+		if claims.ApiKeyID == "" {
+			err = errors.New("Claims were missing a ApiKeyId")
+		} else if claims.SessionKey == "" {
+			err = errors.New("Claims were missing a sessionKey")
+		} else if claims.Room == "" {
+			err = errors.New("Claims were missing a room")
+		}
 		return
 	}
-
-	sessionKeys := r.URL.Query()["sessionKey"]
-	if len(sessionKeys) != 1 {
-		fmt.Println("Bad sessionKey count, should be 1", len(sessionKeys))
-		return
-	}
-	if !checkSessionKey(sessionKeys[0]) {
-		fmt.Println("Invalid sessionKey", sessionKeys[0])
-		return
-	}
-	sessionKey := sessionKeys[0]
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -199,19 +196,36 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	authTokens := r.URL.Query()["authToken"]
+	if len(authTokens) != 1 {
+		fmt.Println("Bad authToken count, should be 1", len(authTokens))
+		return
+	}
+	claims, err := jwt.GetClaims(authTokens[0])
+	if err != nil {
+		fmt.Println("Failed to getClaims", err)
+		return
+	}
+	if err = assertClaims(claims); err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
 	defer func() {
-		membersMap.Delete(sessionKey)
-		announceExit(sessionKey)
+		if err := pionRoom.DestroySession(claims.ApiKeyID, claims.Room, claims.SessionKey); err != nil {
+			log.Println("Failed to close destroy session", claims.ApiKeyID, claims.Room, claims.SessionKey)
+		}
+		announceExit(claims.ApiKeyID, claims.Room, claims.SessionKey)
 		if err := c.Close(); err != nil {
 			log.Println("Failed to close websocket", err)
 		}
 	}()
 
-	membersMap.Store(sessionKey, c)
-	if err = sendMembers(c); err != nil {
+	pionRoom.StoreSession(claims.ApiKeyID, claims.Room, claims.SessionKey, c)
+	if err = sendMembers(claims, c); err != nil {
 		log.Println("sendMembers:", err)
 		return
 	}
 
-	handleWS(c)
+	handleWS(c, claims)
 }
