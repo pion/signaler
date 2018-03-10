@@ -108,7 +108,7 @@ func announceExit(apiKey, room, sessionKey string) {
 	if membersMap, ok := pionRoom.GetRoom(apiKey, room); ok == true {
 		membersMap.Range(func(key, value interface{}) bool {
 			if err := value.(*websocket.Conn).WriteJSON(message); err != nil {
-				fmt.Println("Failed to announceExit", sessionKey, value.(string), err)
+				fmt.Println("Failed to announceExit", sessionKey, err)
 			}
 			return true
 		})

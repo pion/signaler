@@ -29,11 +29,15 @@ var apiKeysMap CountedSyncMap
 func GetRoom(apiKey, room string) (*CountedSyncMap, bool) {
 	rooms, ok := apiKeysMap.Load(apiKey)
 	if ok == false {
-		return &CountedSyncMap{}, ok
+		return nil, ok
 	}
 
 	sessionKeys, ok := rooms.(*CountedSyncMap).Load(room)
-	return sessionKeys.(*CountedSyncMap), ok
+	if ok {
+		return sessionKeys.(*CountedSyncMap), ok
+	} else {
+		return nil, ok
+	}
 }
 
 func GetSession(apiKey, room, sessionKey string) (interface{}, bool) {
