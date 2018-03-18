@@ -62,9 +62,13 @@ type messagePing struct {
 
 func sendMembers(claims *jwt.PionClaim, conn *websocket.Conn) error {
 	message := messageMembers{messageBase: messageBase{Method: "members"}}
+	message.Args.Members = make([]string, 0)
+
 	if membersMap, ok := pionRoom.GetRoom(claims.ApiKeyID, claims.Room); ok == true {
 		membersMap.Range(func(key, value interface{}) bool {
-			message.Args.Members = append(message.Args.Members, key.(string))
+			if key.(string) != claims.SessionKey {
+				message.Args.Members = append(message.Args.Members, key.(string))
+			}
 			return true
 		})
 	}
@@ -76,6 +80,7 @@ func sendSdp(claims *jwt.PionClaim, conn *websocket.Conn, raw []byte) error {
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
+	message.Args.Src = claims.SessionKey
 
 	dstConn, ok := pionRoom.GetSession(claims.ApiKeyID, claims.Room, message.Args.Dst)
 	if ok == false {
@@ -89,6 +94,8 @@ func sendCandidate(claims *jwt.PionClaim, conn *websocket.Conn, raw []byte) erro
 	if err := json.Unmarshal(raw, &message); err != nil {
 		return err
 	}
+	message.Args.Src = claims.SessionKey
+
 	dstConn, ok := pionRoom.GetSession(claims.ApiKeyID, claims.Room, message.Args.Dst)
 	if ok == false {
 		return errors.New("no entry found in membersMap")
