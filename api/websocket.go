@@ -140,7 +140,7 @@ func handleClientMessage(conn *websocket.Conn, claims *jwt.PionClaim, raw []byte
 	case "sdp":
 		return errors.Wrap(sendSdp(claims, conn, raw), "sendSdp failed")
 	case "candidate":
-		return errors.Wrap(sendCandidate(claims, conn, raw), "sendCadidate failed")
+		return errors.Wrap(sendCandidate(claims, conn, raw), "sendCandidate failed")
 	case "pong":
 		return nil
 	default:
