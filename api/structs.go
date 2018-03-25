@@ -1,10 +1,12 @@
 package api
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/gorilla/websocket"
 	"gitlab.com/pions/pion/util/go/jwt"
+	"gitlab.com/pions/pion/util/go/log"
 )
 
 type messageBase struct {
@@ -58,6 +60,12 @@ type pionSession struct {
 }
 
 func (s *pionSession) WriteJSON(v interface{}) error {
+	log.Info().
+		Str("ApiKeyID", s.claims.ApiKeyID).
+		Str("Room", s.claims.Room).
+		Str("SessionKey", s.claims.SessionKey).
+		Str("msg", fmt.Sprintf("%v", v)).
+		Msg("Writing to Websocket")
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.websocket.WriteJSON(v)

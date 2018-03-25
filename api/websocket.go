@@ -3,10 +3,11 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
+
+	"gitlab.com/pions/pion/util/go/log"
 
 	"github.com/pkg/errors"
 	pionRoom "gitlab.com/pions/pion/signaler/room"
@@ -114,25 +115,31 @@ func handleWS(session *pionSession) {
 		for {
 			_, raw, err := session.websocket.ReadMessage()
 			if err != nil {
-				log.Println("Error while reading:", err)
+				log.Warn().Err(err).Msg("websocket.ReadMessage error")
 				close(stop)
 				break
 			}
 			in <- raw
 		}
-		log.Println("Stop reading of connection from", session.websocket.RemoteAddr())
+		log.Info().Str("RemoteAddr", session.websocket.RemoteAddr().String()).Msg("HandleWS ending")
 	}()
 
 	for {
 		select {
 		case _ = <-pingTicker.C:
 			if err := sendPing(session); err != nil {
-				log.Println("Error while writing:", err)
+				log.Error().Err(err).Msg("sendPing has failed")
 				return
 			}
 		case raw := <-in:
+			log.Info().
+				Str("ApiKeyID", session.claims.ApiKeyID).
+				Str("Room", session.claims.Room).
+				Str("SessionKey", session.claims.SessionKey).
+				Str("msg", string(raw)).
+				Msg("Reading from Websocket")
 			if err := handleClientMessage(session, raw); err != nil {
-				log.Println("Error while handling client message:", err)
+				log.Error().Err(err).Msg("handleClientMessage has failed")
 				return
 			}
 		case <-stop:
@@ -156,7 +163,7 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("Failed to upgrade:", err)
+		log.Error().Err(err).Msg("Failed to upgrade websocket")
 		return
 	}
 
@@ -178,17 +185,25 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		if err := pionRoom.DestroySession(claims.ApiKeyID, claims.Room, claims.SessionKey); err != nil {
-			log.Println("Failed to close destroy session", claims.ApiKeyID, claims.Room, claims.SessionKey)
+			log.Error().Err(err).
+				Str("ApiKeyID", claims.ApiKeyID).
+				Str("Room", claims.Room).
+				Str("SessionKey", claims.SessionKey).
+				Msg("Failed to close destroy session")
 		}
 		announceExit(claims.ApiKeyID, claims.Room, claims.SessionKey)
 		if err := session.websocket.Close(); err != nil {
-			log.Println("Failed to close websocket", err)
+			log.Error().Err(err).
+				Str("ApiKeyID", claims.ApiKeyID).
+				Str("Room", claims.Room).
+				Str("SessionKey", claims.SessionKey).
+				Msg("Failed to close websocket")
 		}
 	}()
 
 	pionRoom.StoreSession(claims.ApiKeyID, claims.Room, claims.SessionKey, session)
 	if err = sendMembers(session); err != nil {
-		log.Println("sendMembers:", err)
+		log.Error().Err(err).Msg("call to sendMembers failed")
 		return
 	}
 

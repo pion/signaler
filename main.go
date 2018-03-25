@@ -1,17 +1,18 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 
 	"github.com/gorilla/mux"
 	"gitlab.com/pions/pion/signaler/api"
+	"gitlab.com/pions/pion/util/go/log"
 )
 
 func addRoutes(r *mux.Router) {
 	r.HandleFunc("/", api.HandleRootWSUpgrade)
 	r.HandleFunc("/health", api.HandleHealthCheck)
+	r.Use(log.HTTPRequestOnlyLoggingMiddleware)
 }
 
 func main() {
@@ -28,6 +29,5 @@ func main() {
 	r := mux.NewRouter()
 	addRoutes(r)
 	addRoutes(r.PathPrefix("/v1").Subrouter())
-
-	log.Fatal(http.ListenAndServe("0.0.0.0:"+port, r))
+	log.Fatal().Err(http.ListenAndServe("0.0.0.0:"+port, r))
 }
