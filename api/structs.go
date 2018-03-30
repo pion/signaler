@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"gitlab.com/pions/pion/util/go/jwt"
-	"gitlab.com/pions/pion/util/go/log"
+	"gitlab.com/pions/pion/pkg/go/jwt"
+	"gitlab.com/pions/pion/pkg/go/log"
 )
 
 type messageBase struct {

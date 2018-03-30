@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"gitlab.com/pions/pion/util/go/log"
+	"gitlab.com/pions/pion/pkg/go/log"
 
 	"github.com/pkg/errors"
+	"gitlab.com/pions/pion/pkg/go/jwt"
 	pionRoom "gitlab.com/pions/pion/signaler/room"
-	"gitlab.com/pions/pion/util/go/jwt"
 
 	"github.com/gorilla/websocket"
 )

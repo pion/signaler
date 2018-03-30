@@ -5,8 +5,8 @@ import (
 	"os"
 
 	"github.com/gorilla/mux"
+	"gitlab.com/pions/pion/pkg/go/log"
 	"gitlab.com/pions/pion/signaler/api"
-	"gitlab.com/pions/pion/util/go/log"
 )
 
 func addRoutes(r *mux.Router) {
