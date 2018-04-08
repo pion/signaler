@@ -16,14 +16,13 @@ func addRoutes(r *mux.Router) {
 }
 
 func main() {
+	if os.Getenv("JWT_SECRET") == "" {
+		panic("jwtSecret is a required environment variable")
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		panic("PORT is a required environment variable")
-	}
-
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		panic("jwtSecret is a required environment variable")
 	}
 
 	r := mux.NewRouter()
