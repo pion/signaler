@@ -5,8 +5,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"gitlab.com/pions/pion/pkg/go/jwt"
-	"gitlab.com/pions/pion/pkg/go/log"
+	"github.com/rs/zerolog/log"
 )
 
 type messageBase struct {
@@ -53,17 +52,17 @@ type messagePing struct {
 	messageBase
 }
 
-type pionSession struct {
-	websocket *websocket.Conn
-	claims    *jwt.PionClaim
-	mu        sync.Mutex
+type session struct {
+	ApiKey, Room, SessionKey string
+	websocket                *websocket.Conn
+	mu                       sync.Mutex
 }
 
-func (s *pionSession) WriteJSON(v interface{}) error {
+func (s *session) WriteJSON(v interface{}) error {
 	log.Info().
-		Str("ApiKeyID", s.claims.ApiKeyID).
-		Str("Room", s.claims.Room).
-		Str("SessionKey", s.claims.SessionKey).
+		Str("ApiKeyID", s.ApiKey).
+		Str("Room", s.Room).
+		Str("SessionKey", s.SessionKey).
 		Str("msg", fmt.Sprintf("%v", v)).
 		Msg("Writing to Websocket")
 	s.mu.Lock()
