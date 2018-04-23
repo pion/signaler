@@ -3,7 +3,6 @@ package signaler
 import (
 	"net/http"
 	"net/url"
-	"os"
 
 	"github.com/gorilla/mux"
 	"github.com/pions/signaler/internal/api"
@@ -19,12 +18,7 @@ func EmitClientMessage(s Server) error {
 	return errors.Errorf("EmitClientMessage has not been implemented")
 }
 
-func Start(s Server) error {
-	port := os.Getenv("PORT")
-	if port == "" {
-		panic("PORT is a required environment variable")
-	}
-
+func Start(s Server, port string) error {
 	api.OnClientMessage = s.OnClientMessage
 	api.AuthenticateRequest = s.AuthenticateRequest
 
