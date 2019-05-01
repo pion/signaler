@@ -11,6 +11,8 @@ import (
 
 type Server interface {
 	AuthenticateRequest(params url.Values) (apiKey, room, sessionKey string, ok bool)
+	OnPeerConnect(ApiKey, Room, SessionKey string)
+	OnPeerDisconnect(ApiKey, Room, SessionKey string)
 	OnClientMessage(ApiKey, Room, SessionKey string, raw []byte)
 }
 
@@ -21,6 +23,8 @@ func EmitClientMessage(s Server) error {
 func Start(s Server, port string) error {
 	api.OnClientMessage = s.OnClientMessage
 	api.AuthenticateRequest = s.AuthenticateRequest
+	api.OnPeerConnect = s.OnPeerConnect
+	api.OnPeerDisconnect = s.OnPeerDisconnect
 
 	addRoutes := func(r *mux.Router) {
 		r.HandleFunc("/", api.HandleRootWSUpgrade)

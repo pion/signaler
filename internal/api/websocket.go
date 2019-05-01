@@ -19,6 +19,8 @@ const pingPeriod = 5 * time.Second
 
 var AuthenticateRequest func(params url.Values) (apiKey, room, sessionKey string, ok bool)
 var OnClientMessage func(ApiKey, Room, SessionKey string, raw []byte)
+var OnPeerConnect func(ApiKey, Room, SessionKey string)
+var OnPeerDisconnect func(ApiKey, Room, SessionKey string)
 
 func sendMembers(s *session) error {
 	message := messageMembers{messageBase: messageBase{Method: "members"}}
@@ -180,6 +182,7 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 				Str("SessionKey", sessionKey).
 				Msg("Failed to close websocket")
 		}
+		OnPeerDisconnect(apiKey, room, sessionKey)
 	}()
 
 	pionRoom.StoreSession(apiKey, room, sessionKey, session)
@@ -188,5 +191,6 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	OnPeerConnect(apiKey, room, sessionKey)
 	handleWS(session)
 }
