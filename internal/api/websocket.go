@@ -120,6 +120,7 @@ func handleWS(s *session) {
 			_, raw, err := s.websocket.ReadMessage()
 			if err != nil {
 				log.Warn().Err(err).Msg("websocket.ReadMessage error")
+				stop <- struct{}{}
 				close(stop)
 				break
 			}
@@ -182,7 +183,7 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 				Str("SessionKey", sessionKey).
 				Msg("Failed to close websocket")
 		}
-		OnPeerDisconnect(apiKey, room, sessionKey)
+		go OnPeerDisconnect(apiKey, room, sessionKey)
 	}()
 
 	pionRoom.StoreSession(apiKey, room, sessionKey, session)
@@ -191,6 +192,6 @@ func HandleRootWSUpgrade(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	OnPeerConnect(apiKey, room, sessionKey)
+	go OnPeerConnect(apiKey, room, sessionKey)
 	handleWS(session)
 }
