@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	"github.com/gorilla/mux"
-	"github.com/pions/signaler/internal/api"
+	"github.com/pion/signaler/internal/api"
 	"github.com/pkg/errors"
 )
 
